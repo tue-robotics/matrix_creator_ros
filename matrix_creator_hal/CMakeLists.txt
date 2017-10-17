@@ -11,7 +11,7 @@ find_library(WIRINGPI_LIBRARIES NAMES wiringPi)
 set(MATRIX_CREATOR_LIBRARIES ${MATRIX_HAL_LIBRARIES} ${FFTW_LIBRARIES} ${WIRINGPI_LIBRARIES})
 
 find_package(catkin REQUIRED COMPONENTS
-  matrix_creator_msgs
+  geometry_msgs
   roscpp
 )
 
