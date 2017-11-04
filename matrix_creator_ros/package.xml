@@ -9,8 +9,6 @@
   <license>TODO</license>
   <buildtool_depend>catkin</buildtool_depend>
 
-  <run_depend>matrix_creator_msgs</run_depend>
-
   <run_depend>matrix_creator_hal</run_depend>
 
   <export>
