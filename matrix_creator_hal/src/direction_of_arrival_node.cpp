@@ -9,6 +9,13 @@
 #include <ros/publisher.h>
 #include <geometry_msgs/PoseStamped.h>
 
+uint64_t get_average(const std::valarray<uint64_t>& buffer) {
+  uint64_t avg = 0;
+  for(auto& e : buffer)
+    avg += e;
+  return (avg / buffer.size());
+}
+
 geometry_msgs::PoseStamped g_msg;
 ros::Publisher g_pub;
 
@@ -36,8 +43,8 @@ int main(int argc, char** argv)
   g_pub = nh.advertise<geometry_msgs::PoseStamped>("direction_of_arrival", 1);
 
   std::string frame_id = local_nh.param("frame_id", std::string("map"));
-  double average_energy_threshold = local_nh.param("average_energy_threshold", 30000000);
-  int buffer_length = local_nh.param("buffer_length", 16000);
+  double average_energy_threshold = local_nh.param("average_energy_threshold", 4000000);
+  int buffer_length = local_nh.param("buffer_length", 15);
   g_msg.header.frame_id = frame_id;
 
   ros::Time last_update = ros::Time::now();
@@ -45,90 +52,77 @@ int main(int argc, char** argv)
 
   uint64_t instantE = 0;
   uint64_t avgEnergy = 0;
-  size_t buffer_length = 30;
-  std::valarray<uint64_t> localAverage (buffer_length);
-  localAverage = 0;
+  std::valarray<uint64_t> buffer (buffer_length);
+  buffer = 0;
 
   int j = 0;
   int last_mic = -1;
   while (ros::ok()) 
   {
-    ++j;
-
     // Read microphones and calculate DOA
     mics.Read(); /* Reading 8-mics buffer from de FPGA */
     doa.Calculate();
 
+    // Reset buffer if we receive sound from another direction
     int mic = doa.GetNearestMicrophone();
-
-    instantE  = 0;
-    for (uint32_t s = 0; s < mics.NumberOfSamples(); s++) {
-      instantE = instantE + (mics.At(s, 0))*(mics.At(s, 0));
+    if (last_mic >= 0 && mic != last_mic) {
+      j = 0;
     }
+    last_mic = mic;
 
-    localAverage[j%buffer_length] = instantE;
-    avgEnergy = 0;
-    for(auto& data : localAverage){
-      avgEnergy = (avgEnergy + data);
-    }
+    // Store the energy in the buffer
+    buffer[j] = mics.At(mic, 0)*mics.At(mic, 0);
 
-    avgEnergy = avgEnergy/buffer_length;
+    // If the buffer is full, check if the average is high enough
+    if (j++ == buffer_length) {
+      j = 0;
+        
+      // Check if the average energy level is high enough
+      uint64_t avg_energy = get_average(buffer);
 
-    if (avgEnergy > avg_energy)
-        count_map[mic] += 1;
+      // ROS LOGGING gives a segfault. Could be because of different boost versions
+      std::cout << "Sound detected! Average energy: " << avg_energy << std::endl;
 
-    if ((ros::Time::now() - last_update).toSec() < 1./frequency) {
-        continue;
-    }
-
-    int max_count = 0;
-    for (auto& item : count_map) {
-        std::cout << item.first << ": " << item.second << std::endl;
-        if (item.second > max_count) {
-           mic = item.first;
-           max_count = item.second; 
+      if (avg_energy > average_energy_threshold) { 
+        //ROS_INFO("Detected directional sound, average energy ok!");
+        double yaw = atan2(matrix_hal::micarray_location[mic][1],
+                           matrix_hal::micarray_location[mic][0]);
+    
+        double pitch = 0;
+    
+        int led_offset[] = {23, 27, 32, 1, 6, 10, 14, 19};
+        int lut[] = {1, 2, 10, 200, 10, 2, 1};
+        for (matrix_hal::LedValue& led : image1d.leds) {
+          led.blue = 0;
         }
-    }
-    count_map.clear();
-    last_update = ros::Time::now();
-
-    ROS_INFO("Max count = %d", max_count);
-
-    if (max_count < min_count) continue;
-
-    // Get the result (spherical, can be represented as RPY with roll = 0)
-
-    double yaw = atan2(matrix_hal::micarray_location[mic][1],
-		    matrix_hal::micarray_location[mic][0]);
-
-    double pitch = 0;
-
-    int led_offset[] = {23, 27, 32, 1, 6, 10, 14, 19};
-    int lut[] = {1, 2, 10, 200, 10, 2, 1};
-    for (matrix_hal::LedValue& led : image1d.leds) {
-      led.blue = 0;
-    }
-
-    for (int i = led_offset[mic] - 3, j = 0; i < led_offset[mic] + 3;
-         ++i, ++j) {
-      if (i < 0) {
-        image1d.leds[image1d.leds.size() + i].blue = lut[j];
-      } else {
-        image1d.leds[i % image1d.leds.size()].blue = lut[j];
+    
+        for (int i = led_offset[mic] - 3, j = 0; i < led_offset[mic] + 3;
+             ++i, ++j) {
+          if (i < 0) {
+            image1d.leds[image1d.leds.size() + i].blue = lut[j];
+          } else {
+            image1d.leds[i % image1d.leds.size()].blue = lut[j];
+          }
+    
+          everloop.Write(&image1d);
+        }
+    
+        // Fill the message
+        g_msg.pose.orientation.x = - sin(pitch) * sin(yaw);
+        g_msg.pose.orientation.y = sin(pitch) * cos(yaw);
+        g_msg.pose.orientation.z = cos(pitch) * sin(yaw / 2.0);
+        g_msg.pose.orientation.w = cos(pitch) * cos(yaw / 2.0);
+    
+        // Publish result
+        g_msg.header.stamp = ros::Time::now();
+        g_pub.publish(g_msg);
       }
-
-      everloop.Write(&image1d);
+      else
+      {
+        //ROS_WARN("Detected directional sound, average energy too low!");
+      }
     }
 
-    // Fill the message
-    g_msg.pose.orientation.x = - sin(pitch) * sin(yaw);
-    g_msg.pose.orientation.y = sin(pitch) * cos(yaw);
-    g_msg.pose.orientation.z = cos(pitch) * sin(yaw / 2.0);
-    g_msg.pose.orientation.w = cos(pitch) * cos(yaw / 2.0);
-
-    // Publish result
-    g_msg.header.stamp = ros::Time::now();
-    g_pub.publish(g_msg);
   }
   return 0;
 }
