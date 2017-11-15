@@ -9,7 +9,12 @@
 #include <ros/publisher.h>
 #include <geometry_msgs/PoseStamped.h>
 
-uint64_t get_average(const std::valarray<uint64_t>& buffer) {
+/**
+ * Compute the average value of the  entire buffer.
+ * @param buffer Values to average.
+ * @return Average of all the values.
+ */
+static uint64_t get_average(const std::valarray<uint64_t>& buffer) {
   uint64_t avg = 0;
   for(auto& e : buffer)
     avg += e;
@@ -19,7 +24,7 @@ uint64_t get_average(const std::valarray<uint64_t>& buffer) {
 geometry_msgs::PoseStamped g_msg;
 ros::Publisher g_pub;
 
-int main(int argc, char** argv) 
+int main(int argc, char** argv)
 {
   ros::init(argc, argv, "direction_of_arrival");
   ros::NodeHandle local_nh("~");
@@ -57,7 +62,7 @@ int main(int argc, char** argv)
 
   int j = 0;
   int last_mic = -1;
-  while (ros::ok()) 
+  while (ros::ok())
   {
     // Read microphones and calculate DOA
     mics.Read(); /* Reading 8-mics buffer from de FPGA */
@@ -76,26 +81,26 @@ int main(int argc, char** argv)
     // If the buffer is full, check if the average is high enough
     if (j++ == buffer_length) {
       j = 0;
-        
+
       // Check if the average energy level is high enough
       uint64_t avg_energy = get_average(buffer);
 
       // ROS LOGGING gives a segfault. Could be because of different boost versions
       std::cout << "Sound detected! Average energy: " << avg_energy << std::endl;
 
-      if (avg_energy > average_energy_threshold) { 
+      if (avg_energy > average_energy_threshold) {
         //ROS_INFO("Detected directional sound, average energy ok!");
         double yaw = atan2(matrix_hal::micarray_location[mic][1],
                            matrix_hal::micarray_location[mic][0]);
-    
+
         double pitch = 0;
-    
+
         int led_offset[] = {23, 27, 32, 1, 6, 10, 14, 19};
         int lut[] = {1, 2, 10, 200, 10, 2, 1};
         for (matrix_hal::LedValue& led : image1d.leds) {
           led.blue = 0;
         }
-    
+
         for (int i = led_offset[mic] - 3, j = 0; i < led_offset[mic] + 3;
              ++i, ++j) {
           if (i < 0) {
@@ -103,16 +108,16 @@ int main(int argc, char** argv)
           } else {
             image1d.leds[i % image1d.leds.size()].blue = lut[j];
           }
-    
+
           everloop.Write(&image1d);
         }
-    
+
         // Fill the message
         g_msg.pose.orientation.x = - sin(pitch) * sin(yaw);
         g_msg.pose.orientation.y = sin(pitch) * cos(yaw);
         g_msg.pose.orientation.z = cos(pitch) * sin(yaw / 2.0);
         g_msg.pose.orientation.w = cos(pitch) * cos(yaw / 2.0);
-    
+
         // Publish result
         g_msg.header.stamp = ros::Time::now();
         g_pub.publish(g_msg);
