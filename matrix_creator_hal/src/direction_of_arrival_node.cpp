@@ -94,11 +94,6 @@ int main(int argc, char** argv)
   int buffer_length = local_nh.param("buffer_length", 15);
   g_msg.header.frame_id = frame_id;
 
-  ros::Time last_update = ros::Time::now();
-  std::map<int, size_t> count_map;
-
-  uint64_t instantE = 0;
-  uint64_t avgEnergy = 0;
   std::valarray<uint64_t> buffer (buffer_length);
   buffer = 0;
 
