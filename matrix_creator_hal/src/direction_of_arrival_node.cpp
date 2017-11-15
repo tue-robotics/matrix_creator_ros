@@ -50,6 +50,22 @@ static void write_leds(matrix_hal::Everloop &everloop, matrix_hal::EverloopImage
 geometry_msgs::PoseStamped g_msg;
 ros::Publisher g_pub;
 
+/**
+ * Construct a pose message and post it.
+ * @param pitch Pitch of the pose.
+ * @param yaw Yaw of the pose
+ */
+static void fill_and_publish_pose(double pitch, double yaw) {
+  g_msg.pose.orientation.x = - sin(pitch) * sin(yaw);
+  g_msg.pose.orientation.y = sin(pitch) * cos(yaw);
+  g_msg.pose.orientation.z = cos(pitch) * sin(yaw / 2.0);
+  g_msg.pose.orientation.w = cos(pitch) * cos(yaw / 2.0);
+
+  // Publish result
+  g_msg.header.stamp = ros::Time::now();
+  g_pub.publish(g_msg);
+}
+
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "direction_of_arrival");
@@ -134,16 +150,7 @@ int main(int argc, char** argv)
     double yaw = atan2(matrix_hal::micarray_location[mic][1],
                        matrix_hal::micarray_location[mic][0]);
 
-    double pitch = 0;
-
-    g_msg.pose.orientation.x = - sin(pitch) * sin(yaw);
-    g_msg.pose.orientation.y = sin(pitch) * cos(yaw);
-    g_msg.pose.orientation.z = cos(pitch) * sin(yaw / 2.0);
-    g_msg.pose.orientation.w = cos(pitch) * cos(yaw / 2.0);
-
-    // Publish result
-    g_msg.header.stamp = ros::Time::now();
-    g_pub.publish(g_msg);
+    fill_and_publish_pose(0, yaw);
   }
   return 0;
 }
