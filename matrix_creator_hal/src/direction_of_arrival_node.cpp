@@ -60,8 +60,8 @@ int main(int argc, char** argv)
   std::valarray<uint64_t> buffer (buffer_length);
   buffer = 0;
 
-  int j = 0;
-  int last_mic = -1;
+  int next_free = 0; // Next free element in the buffer.
+  int last_mic = -1; // Direction of the last heard sound.
   while (ros::ok())
   {
     // Read microphones and calculate DOA
@@ -71,16 +71,17 @@ int main(int argc, char** argv)
     // Reset buffer if we receive sound from another direction
     int mic = doa.GetNearestMicrophone();
     if (last_mic >= 0 && mic != last_mic) {
-      j = 0;
+      next_free = 0;
     }
     last_mic = mic;
 
     // Store the energy in the buffer
-    buffer[j] = mics.At(mic, 0)*mics.At(mic, 0);
+    buffer[next_free] = mics.At(mic, 0)*mics.At(mic, 0);
+    next_free++;
 
     // If the buffer is full, check if the average is high enough
-    if (j++ == buffer_length) {
-      j = 0;
+    if (next_free == buffer_length) {
+      next_free = 0;
 
       // Check if the average energy level is high enough
       uint64_t avg_energy = get_average(buffer);
@@ -101,6 +102,7 @@ int main(int argc, char** argv)
           led.blue = 0;
         }
 
+        int j;
         for (int i = led_offset[mic] - 3, j = 0; i < led_offset[mic] + 3;
              ++i, ++j) {
           if (i < 0) {
