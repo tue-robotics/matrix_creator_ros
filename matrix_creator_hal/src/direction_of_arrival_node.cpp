@@ -105,41 +105,45 @@ int main(int argc, char** argv)
     buffer[next_free] = mics.At(mic, 0)*mics.At(mic, 0);
     next_free++;
 
-    // If the buffer is full, check if the average is high enough
-    if (next_free == buffer_length) {
-      next_free = 0;
-
-      // Check if the average energy level is high enough
-      uint64_t avg_energy = get_average(buffer);
-
-      // ROS LOGGING gives a segfault. Could be because of different boost versions
-      std::cout << "Sound detected! Average energy: " << avg_energy << std::endl;
-
-      if (avg_energy > average_energy_threshold) {
-        //ROS_INFO("Detected directional sound, average energy ok!");
-        write_leds(everloop, image1d, mic);
-
-        // Fill the message
-        double yaw = atan2(matrix_hal::micarray_location[mic][1],
-                           matrix_hal::micarray_location[mic][0]);
-
-        double pitch = 0;
-
-        g_msg.pose.orientation.x = - sin(pitch) * sin(yaw);
-        g_msg.pose.orientation.y = sin(pitch) * cos(yaw);
-        g_msg.pose.orientation.z = cos(pitch) * sin(yaw / 2.0);
-        g_msg.pose.orientation.w = cos(pitch) * cos(yaw / 2.0);
-
-        // Publish result
-        g_msg.header.stamp = ros::Time::now();
-        g_pub.publish(g_msg);
-      }
-      else
-      {
-        //ROS_WARN("Detected directional sound, average energy too low!");
-      }
+    // If the buffer is not full, wait for more measurements.
+    if (next_free < buffer_length) {
+      continue;
     }
 
+    // Buffer is full, check if we heard anything meaningful.
+    uint64_t avg_energy = get_average(buffer);
+
+    // ROS LOGGING gives a segfault. Could be because of different boost versions
+    std::cout << "Sound detected! Average energy: " << avg_energy << std::endl;
+
+    next_free = 0; // Clear buffer for next set of measurements.
+
+
+    // If not enough energy, there was no sound. Continue listening.
+    if (avg_energy <= average_energy_threshold) {
+      //ROS_WARN("Detected directional sound, average energy too low!");
+      continue;
+    }
+
+    // Enough energy, we heard something!
+
+    //ROS_INFO("Detected directional sound, average energy ok!");
+    write_leds(everloop, image1d, mic);
+
+    // Fill and publish the message.
+    double yaw = atan2(matrix_hal::micarray_location[mic][1],
+                       matrix_hal::micarray_location[mic][0]);
+
+    double pitch = 0;
+
+    g_msg.pose.orientation.x = - sin(pitch) * sin(yaw);
+    g_msg.pose.orientation.y = sin(pitch) * cos(yaw);
+    g_msg.pose.orientation.z = cos(pitch) * sin(yaw / 2.0);
+    g_msg.pose.orientation.w = cos(pitch) * cos(yaw / 2.0);
+
+    // Publish result
+    g_msg.header.stamp = ros::Time::now();
+    g_pub.publish(g_msg);
   }
   return 0;
 }
