@@ -21,6 +21,32 @@ static uint64_t get_average(const std::valarray<uint64_t>& buffer) {
   return (avg / buffer.size());
 }
 
+/**
+ * Write the direction of a sound into the leds.
+ * @param everloop Hardware access to the leds.
+ * @param image1d led status.
+ */
+static void write_leds(matrix_hal::Everloop &everloop, matrix_hal::EverloopImage &image1d, int mic) {
+  static const int led_offset[] = {23, 27, 32, 1, 6, 10, 14, 19};
+  static const int lut[] = {1, 2, 10, 200, 10, 2, 1};
+
+  for (matrix_hal::LedValue& led : image1d.leds) {
+    led.blue = 0;
+  }
+
+  int j;
+  for (int i = led_offset[mic] - 3, j = 0; i < led_offset[mic] + 3;
+       ++i, ++j) {
+    if (i < 0) {
+      image1d.leds[image1d.leds.size() + i].blue = lut[j];
+    } else {
+      image1d.leds[i % image1d.leds.size()].blue = lut[j];
+    }
+
+    everloop.Write(&image1d);
+  }
+}
+
 geometry_msgs::PoseStamped g_msg;
 ros::Publisher g_pub;
 
@@ -91,30 +117,14 @@ int main(int argc, char** argv)
 
       if (avg_energy > average_energy_threshold) {
         //ROS_INFO("Detected directional sound, average energy ok!");
+        write_leds(everloop, image1d, mic);
+
+        // Fill the message
         double yaw = atan2(matrix_hal::micarray_location[mic][1],
                            matrix_hal::micarray_location[mic][0]);
 
         double pitch = 0;
 
-        int led_offset[] = {23, 27, 32, 1, 6, 10, 14, 19};
-        int lut[] = {1, 2, 10, 200, 10, 2, 1};
-        for (matrix_hal::LedValue& led : image1d.leds) {
-          led.blue = 0;
-        }
-
-        int j;
-        for (int i = led_offset[mic] - 3, j = 0; i < led_offset[mic] + 3;
-             ++i, ++j) {
-          if (i < 0) {
-            image1d.leds[image1d.leds.size() + i].blue = lut[j];
-          } else {
-            image1d.leds[i % image1d.leds.size()].blue = lut[j];
-          }
-
-          everloop.Write(&image1d);
-        }
-
-        // Fill the message
         g_msg.pose.orientation.x = - sin(pitch) * sin(yaw);
         g_msg.pose.orientation.y = sin(pitch) * cos(yaw);
         g_msg.pose.orientation.z = cos(pitch) * sin(yaw / 2.0);
