@@ -138,7 +138,7 @@ int main(int argc, char** argv)
 
     // Enough energy, we heard something!
 
-    //ROS_INFO("Detected directional sound, average energy ok!");
+    ROS_INFO("Detected directional sound, average energy ok!");
     write_leds(everloop, image1d, mic);
 
     // Fill and publish the message.
