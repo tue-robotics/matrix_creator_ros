@@ -132,7 +132,7 @@ int main(int argc, char** argv)
 
     // If not enough energy, there was no sound. Continue listening.
     if (avg_energy <= average_energy_threshold) {
-      //ROS_WARN("Detected directional sound, average energy too low!");
+      ROS_WARN("Detected directional sound, average energy too low!");
       continue;
     }
 
