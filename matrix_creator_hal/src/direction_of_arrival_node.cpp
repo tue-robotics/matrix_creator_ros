@@ -25,26 +25,27 @@ static uint64_t get_average(const std::valarray<uint64_t>& buffer) {
  * Write the direction of a sound into the leds.
  * @param everloop Hardware access to the leds.
  * @param image1d led status.
+ * @param red Red value.
+ * @param green Green value.
+ * @param blue Blue value.
  */
-static void write_leds(matrix_hal::Everloop &everloop, matrix_hal::EverloopImage &image1d, int mic) {
+static void write_leds(matrix_hal::Everloop &everloop, matrix_hal::EverloopImage &image1d, int mic,
+                       int red, int green, int blue) {
   static const int led_offset[] = {23, 27, 32, 1, 6, 10, 14, 19};
-  static const int lut[] = {1, 2, 10, 200, 10, 2, 1};
 
   for (matrix_hal::LedValue& led : image1d.leds) {
-    led.blue = 0;
+    if (red >= 0) led.red = 0;
+    if (green >= 0) led.green = 0;
+    if (blue >= 0) led.blue = 0;
   }
 
-  int j;
-  for (int i = led_offset[mic] - 3, j = 0; i < led_offset[mic] + 3;
-       ++i, ++j) {
-    if (i < 0) {
-      image1d.leds[image1d.leds.size() + i].blue = lut[j];
-    } else {
-      image1d.leds[i % image1d.leds.size()].blue = lut[j];
-    }
+  int i = led_offset[mic];
+  int led_idx = i < 0 ? image1d.leds.size() + i : i % image1d.leds.size();
+  if (red >= 0) image1d.leds[led_idx].red = red;
+  if (green >= 0) image1d.leds[led_idx].green = green;
+  if (blue >= 0) image1d.leds[led_idx].blue = blue;
 
-    everloop.Write(&image1d);
-  }
+  everloop.Write(&image1d);
 }
 
 geometry_msgs::PoseStamped g_msg;
@@ -112,6 +113,8 @@ int main(int argc, char** argv)
     }
     last_mic = mic;
 
+    write_leds(everloop, image1d, mic, -1, -1, 20);
+
     // Store the energy in the buffer
     buffer[next_free] = mics.At(mic, 0)*mics.At(mic, 0);
     next_free++;
@@ -139,7 +142,7 @@ int main(int argc, char** argv)
     // Enough energy, we heard something!
 
     ROS_INFO("Detected directional sound, average energy ok!");
-    write_leds(everloop, image1d, mic);
+    write_leds(everloop, image1d, mic, 100, -1, -1);
 
     // Fill and publish the message.
     double yaw = atan2(matrix_hal::micarray_location[mic][1],
